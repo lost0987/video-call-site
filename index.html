@@ -32,9 +32,10 @@
     const db = firebase.firestore();
 
     const queueRef = db.collection("queue");
+    const matchRef = db.collection("match");
 
-    let currentRoom = null;
     let myId = Math.random().toString(36).substring(2);
+    let currentRoom = null;
     let matched = false;
   </script>
 
@@ -48,7 +49,6 @@
       const myDoc = queueRef.doc(myId);
 
       try {
-        // STEP 1: check if someone already waiting
         const snapshot = await queueRef.get();
 
         let partner = null;
@@ -60,28 +60,31 @@
         });
 
         if (partner) {
-          // STEP 2: lock partner immediately
+
+          // 🔥 CREATE SINGLE SHARED ROOM
+          const room = "room_" + Math.floor(Math.random() * 100000);
+
+          // 🔥 STORE MATCH FOR BOTH USERS
+          await matchRef.doc(partner).set({ room });
+          await matchRef.doc(myId).set({ room });
+
+          // remove partner from queue
           await queueRef.doc(partner).delete();
 
-          createRoom();
+          startCall(room);
+
         } else {
-          // STEP 3: join queue
-          await myDoc.set({
-            time: Date.now()
-          });
+
+          await myDoc.set({ time: Date.now() });
 
           document.getElementById("status").innerText = "Waiting for stranger...";
 
-          // STEP 4: real-time match listener
-          queueRef.onSnapshot((snap) => {
-            if (matched) return;
-
-            snap.docChanges().forEach(change => {
-              if (change.type === "removed") {
-                matched = true;
-                createRoom();
-              }
-            });
+          // REAL-TIME LISTENER FOR MATCH
+          matchRef.doc(myId).onSnapshot((doc) => {
+            if (doc.exists && !matched) {
+              matched = true;
+              startCall(doc.data().room);
+            }
           });
         }
 
@@ -91,15 +94,15 @@
       }
     }
 
-    function createRoom() {
+    function startCall(room) {
       if (currentRoom) return;
 
-      currentRoom = "room_" + Math.floor(Math.random() * 100000);
+      currentRoom = room;
 
       document.getElementById("status").innerText = "Connected";
 
       new JitsiMeetExternalAPI("meet.jit.si", {
-        roomName: currentRoom,
+        roomName: room,
         width: "100%",
         height: 500,
         parentNode: document.querySelector("#meet")
