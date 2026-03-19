@@ -8,9 +8,9 @@
 
   <h1>Random Video Chat</h1>
 
-  <button onclick="findPartner()">Start Random Chat</button>
+  <button onclick="start()">Start Finding Stranger</button>
 
-  <p id="status">Click start to find someone...</p>
+  <p id="status">Idle</p>
 
   <div id="meet"></div>
 
@@ -30,69 +30,71 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+
+    const waitingRef = db.collection("waiting");
+
+    let myId = Math.random().toString(36).substring(2);
+    let currentRoom = null;
   </script>
 
   <!-- Jitsi -->
   <script src="https://meet.jit.si/external_api.js"></script>
 
   <script>
-    let currentRoom = null;
-    let listener = null;
+    async function start() {
+      document.getElementById("status").innerText = "Searching...";
 
-    async function findPartner() {
-      document.getElementById("status").innerText = "Searching for a partner...";
+      // Step 1: check if someone is waiting
+      const snapshot = await waitingRef.get();
 
-      const waitingRef = db.collection("waiting").doc("queue");
-      const doc = await waitingRef.get();
+      let partner = null;
 
-      if (!doc.exists || !doc.data().waiting) {
+      snapshot.forEach(doc => {
+        if (doc.id !== myId) {
+          partner = doc.id;
+        }
+      });
 
-        // No one waiting → you become first user
-        await waitingRef.set({
-          waiting: true,
-          timestamp: Date.now()
+      if (!partner) {
+        // No one waiting → add yourself
+        await waitingRef.doc(myId).set({
+          time: Date.now()
         });
 
-        document.getElementById("status").innerText = "Waiting for someone...";
+        document.getElementById("status").innerText = "Waiting for stranger...";
 
-        listener = waitingRef.onSnapshot((snap) => {
-          const data = snap.data();
-          if (data && data.room) {
-            startCall(data.room);
-          }
+        // keep checking
+        waitingRef.onSnapshot((snap) => {
+          snap.docChanges().forEach(change => {
+            if (change.type === "removed" && currentRoom) {
+              startCall(currentRoom);
+            }
+          });
         });
 
       } else {
+        // Match found → remove partner
+        await waitingRef.doc(partner).delete();
 
-        // Someone is waiting → match found
-        const roomName = "room_" + Math.floor(Math.random() * 100000);
+        const room = "room_" + Math.floor(Math.random() * 100000);
 
-        await waitingRef.set({
-          waiting: false,
-          room: roomName
-        });
-
-        startCall(roomName);
+        currentRoom = room;
+        startCall(room);
       }
     }
 
-    function startCall(roomName) {
-      if (currentRoom) return;
+    function startCall(room) {
+      if (window.started) return;
+      window.started = true;
 
-      currentRoom = roomName;
+      document.getElementById("status").innerText = "Connected";
 
-      document.getElementById("status").innerText = "Connected!";
-
-      const domain = "meet.jit.si";
-
-      const options = {
-        roomName: roomName,
+      new JitsiMeetExternalAPI("meet.jit.si", {
+        roomName: room,
         width: "100%",
         height: 500,
-        parentNode: document.querySelector('#meet'),
-      };
-
-      new JitsiMeetExternalAPI(domain, options);
+        parentNode: document.querySelector("#meet")
+      });
     }
   </script>
 
