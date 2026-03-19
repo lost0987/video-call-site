@@ -1,42 +1,87 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Video Chat</title>
+  <title>Random Video Chat</title>
 </head>
 
 <body style="text-align:center; font-family:sans-serif;">
+
   <h1>Random Video Chat</h1>
 
-  <input id="roomInput" placeholder="Enter Room Name">
-  <button onclick="startCall()">Join Room</button>
+  <button onclick="findPartner()">Start Random Chat</button>
+
+  <p id="status">Click start to find someone...</p>
 
   <div id="meet"></div>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
-<script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyCHtDRiuJiYQ1bPyOCuIlsrntU01G4cokQ",
-    authDomain: "video-chat-app-251c4.firebaseapp.com",
-    projectId: "video-chat-app-251c4",
-    storageBucket: "video-chat-app-251c4.firebasestorage.app",
-    messagingSenderId: "1092380086005",
-    appId: "1:1092380086005:web:2da32930f520208cb87fbc"
-  };
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-</script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCHtDRiuJiYQ1bPyOCuIlsrntU01G4cokQ",
+      authDomain: "video-chat-app-251c4.firebaseapp.com",
+      projectId: "video-chat-app-251c4",
+      storageBucket: "video-chat-app-251c4.firebasestorage.app",
+      messagingSenderId: "1092380086005",
+      appId: "1:1092380086005:web:2da32930f520208cb87fbc"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+  </script>
+
+  <!-- Jitsi -->
   <script src="https://meet.jit.si/external_api.js"></script>
 
   <script>
-    function startCall() {
-      const roomName = document.getElementById("roomInput").value;
+    let currentRoom = null;
+    let listener = null;
 
-      if (!roomName) {
-        alert("Please enter a room name");
-        return;
+    async function findPartner() {
+      document.getElementById("status").innerText = "Searching for a partner...";
+
+      const waitingRef = db.collection("waiting").doc("queue");
+      const doc = await waitingRef.get();
+
+      if (!doc.exists || !doc.data().waiting) {
+
+        // No one waiting → you become first user
+        await waitingRef.set({
+          waiting: true,
+          timestamp: Date.now()
+        });
+
+        document.getElementById("status").innerText = "Waiting for someone...";
+
+        listener = waitingRef.onSnapshot((snap) => {
+          const data = snap.data();
+          if (data && data.room) {
+            startCall(data.room);
+          }
+        });
+
+      } else {
+
+        // Someone is waiting → match found
+        const roomName = "room_" + Math.floor(Math.random() * 100000);
+
+        await waitingRef.set({
+          waiting: false,
+          room: roomName
+        });
+
+        startCall(roomName);
       }
+    }
+
+    function startCall(roomName) {
+      if (currentRoom) return;
+
+      currentRoom = roomName;
+
+      document.getElementById("status").innerText = "Connected!";
 
       const domain = "meet.jit.si";
 
