@@ -1,31 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>My Video Call</title>
+  <title>Video Chat</title>
 </head>
 
 <body style="text-align:center; font-family:sans-serif;">
-  <h1>My Free Video Call Website</h1>
-  <p>Share this page link with your friend to start a call</p>
+  <h1>Random Video Chat</h1>
+
+  <input id="roomInput" placeholder="Enter Room Name">
+  <button onclick="startCall()">Join Room</button>
 
   <div id="meet"></div>
 
   <script src="https://meet.jit.si/external_api.js"></script>
 
   <script>
-    // This creates a random room every time
-    const roomName = "Room" + Math.floor(Math.random() * 100000);
+    function startCall() {
+      const roomName = document.getElementById("roomInput").value;
 
-    const domain = "meet.jit.si";
+      if (!roomName) {
+        alert("Please enter a room name");
+        return;
+      }
 
-    const options = {
-      roomName: roomName,
-      width: "100%",
-      height: 500,
-      parentNode: document.querySelector('#meet'),
-    };
+      const domain = "meet.jit.si";
 
-    const api = new JitsiMeetExternalAPI(domain, options);
+      const options = {
+        roomName: roomName,
+        width: "100%",
+        height: 500,
+        parentNode: document.querySelector('#meet'),
+      };
+
+      new JitsiMeetExternalAPI(domain, options);
+    }
   </script>
 
 </body>
