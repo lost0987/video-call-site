@@ -34,8 +34,8 @@
     const queueRef = db.collection("queue");
 
     let currentRoom = null;
-    let myDoc = null;
-    let listening = false;
+    let myId = Math.random().toString(36).substring(2);
+    let matched = false;
   </script>
 
   <!-- Jitsi -->
@@ -45,45 +45,49 @@
     async function startChat() {
       document.getElementById("status").innerText = "Searching...";
 
-      // create unique user entry
-      const userId = Math.random().toString(36).substring(2);
+      const myDoc = queueRef.doc(myId);
 
-      const docRef = queueRef.doc(userId);
+      try {
+        // STEP 1: check if someone already waiting
+        const snapshot = await queueRef.get();
 
-      const snapshot = await queueRef.get();
+        let partner = null;
 
-      let partner = null;
-
-      snapshot.forEach(doc => {
-        if (!partner) {
-          partner = doc.id;
-        }
-      });
-
-      if (partner) {
-        // match found → remove partner
-        await queueRef.doc(partner).delete();
-
-        createRoom();
-      } else {
-        // no partner → join queue
-        await docRef.set({
-          time: Date.now()
+        snapshot.forEach(doc => {
+          if (doc.id !== myId && !partner) {
+            partner = doc.id;
+          }
         });
 
-        myDoc = docRef;
+        if (partner) {
+          // STEP 2: lock partner immediately
+          await queueRef.doc(partner).delete();
 
-        document.getElementById("status").innerText = "Waiting for stranger...";
+          createRoom();
+        } else {
+          // STEP 3: join queue
+          await myDoc.set({
+            time: Date.now()
+          });
 
-        if (!listening) {
-          listening = true;
+          document.getElementById("status").innerText = "Waiting for stranger...";
 
-          queueRef.onSnapshot(() => {
-            queueRef.get().then(snap => {
-              if (snap.empty) return;
+          // STEP 4: real-time match listener
+          queueRef.onSnapshot((snap) => {
+            if (matched) return;
+
+            snap.docChanges().forEach(change => {
+              if (change.type === "removed") {
+                matched = true;
+                createRoom();
+              }
             });
           });
         }
+
+      } catch (err) {
+        console.log(err);
+        document.getElementById("status").innerText = "Error connecting";
       }
     }
 
@@ -100,9 +104,6 @@
         height: 500,
         parentNode: document.querySelector("#meet")
       });
-
-      // cleanup queue
-      if (myDoc) myDoc.delete();
     }
   </script>
 
